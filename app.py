@@ -2,14 +2,38 @@ import os
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from bson import json_util
-import json
+import certifi  # Add this import
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# MongoDB Atlas connection string
-mongodb_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/myapp_db")
-client = MongoClient(mongodb_uri)
-db = client.get_database()  # This should now work because the database is specified in the URI
+# MongoDB Atlas connection string with SSL parameters
+mongodb_uri = os.getenv('MONGODB_URI')
+if not mongodb_uri:
+    logger.error("No MongoDB URI found in environment variables!")
+    raise ValueError("MongoDB URI not configured")
+
+try:
+    # Use certifi for SSL certificate verification
+    client = MongoClient(mongodb_uri,
+                        tlsCAFile=certifi.where(),  # Add SSL certificate
+                        serverSelectionTimeoutMS=5000)  # Reduce timeout for faster error reporting
+    
+    db = client['your_database_name']  # Replace with your actual database name
+    
+    # Test the connection
+    client.admin.command('ping')
+    logger.info("Successfully connected to MongoDB!")
+    
+    # Create index for geospatial queries
+    db.locations.create_index([("location", "2dsphere")])
+    logger.info("Created 2dsphere index")
+except Exception as e:
+    logger.error(f"MongoDB Connection Error: {e}")
+    raise
 
 @app.route("/")
 def hello_world():
